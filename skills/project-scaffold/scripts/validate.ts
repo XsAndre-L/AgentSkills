@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
 import {
+  directoryInventory,
   isRecord,
   loadJsonObject,
   resolveRootPath,
@@ -22,14 +22,16 @@ interface ValidationArguments {
 }
 
 interface ScaffoldLock extends JsonObject {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   files: Record<string, unknown>;
   obsoleteFiles?: Record<string, unknown>;
+  emissions?: Record<string, unknown>;
 }
 
 type ValidationStatus =
   | "missing"
   | "modified"
+  | "unexpected"
   | "obsolete-generated"
   | "obsolete-modified"
   | "ok";
@@ -77,6 +79,32 @@ function inspect(
     results.push({ path: relative, status });
   }
 
+  for (const [destination, record] of sortedEntries(lock.emissions ?? {})) {
+    if (!isRecord(record) || record.destination !== destination ||
+        destination !== `.agents/skills/${record.name}`) {
+      throw new ValidationError(`Invalid emission destination in lock: ${destination}`);
+    }
+    const target = safeChild(root, destination, "emitted skill", validationError);
+    const prefix = `${destination}/`;
+    if (!existsSync(target) || !statSync(target).isDirectory()) {
+      results.push({ path: destination, status: "missing" });
+      continue;
+    }
+    const inventory = directoryInventory(target, validationError);
+    for (const [path] of sortedEntries(inventory.files)) {
+      const relative = `${prefix}${path}`;
+      if (!Object.hasOwn(lock.files, relative)) {
+        results.push({ path: relative, status: "unexpected" });
+      }
+    }
+    // File-level diagnostics explain normal drift. A digest-only mismatch also
+    // detects inconsistent emission metadata in an otherwise healthy lock.
+    if (inventory.digest !== record.digest &&
+        !results.some((item) => item.path.startsWith(prefix) && item.status !== "ok")) {
+      results.push({ path: destination, status: "modified" });
+    }
+  }
+
   for (const [relative, unknownRecord] of sortedEntries(lock.obsoleteFiles ?? {})) {
     const target = safeChild(root, relative, "locked", validationError);
     if (!existsSync(target)) continue;
@@ -122,11 +150,12 @@ export function runValidation(argv: string[]): number {
   try {
     const args = parseArguments(argv);
     const root = resolveRootPath(args.root);
-    const lock = loadLock(resolve(root, LOCK_NAME));
+    const lock = loadLock(safeChild(root, LOCK_NAME, "scaffold lock", validationError));
     const results = inspect(root, lock);
     const statuses: ValidationStatus[] = [
       "missing",
       "modified",
+      "unexpected",
       "obsolete-generated",
       "obsolete-modified",
       "ok",
@@ -156,7 +185,7 @@ export function runValidation(argv: string[]): number {
           .join(", ")}`,
       );
     }
-    return counts.missing || counts.modified || counts["obsolete-modified"] ? 1 : 0;
+    return counts.missing || counts.modified || counts.unexpected || counts["obsolete-modified"] ? 1 : 0;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error(`error: ${detail}`);

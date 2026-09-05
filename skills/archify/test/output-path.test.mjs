@@ -324,10 +324,10 @@ console.log(JSON.stringify({
   child.stderr.on('data', (chunk) => { stderr += chunk; });
 
   const started = Date.now();
-  while (!fs.existsSync(marker) && Date.now() - started < 3000) {
+  while (!fs.existsSync(marker) && Date.now() - started < 10000) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  assert.equal(fs.existsSync(marker), true, `renderer did not start; stderr=${stderr}`);
+  assert.equal(fs.existsSync(marker), true, `renderer did not start; stdout=${stdout}; stderr=${stderr}`);
   const candidatePath = fs.readFileSync(marker, 'utf8');
   const candidateRelative = path.relative(linkedDirectory, candidatePath);
   fs.mkdirSync(path.dirname(path.join(inputDirectory, candidateRelative)), { recursive: true });

@@ -13,6 +13,7 @@ import { basename, dirname, posix, relative, resolve } from "node:path";
 import {
   atomicReplaceDirectory,
   atomicWrite,
+  directoryInventory,
   isRecord,
   loadJsonObject,
   mergeJsonAssemblySlots,
@@ -29,7 +30,7 @@ import {
 
 const SKILL_ROOT = resolve(import.meta.dir, "..");
 const SKILL_NAME = "project-scaffold";
-const SKILL_VERSION = "0.12.1";
+const SKILL_VERSION = "0.12.2";
 const PIECES_ROOT = resolve(SKILL_ROOT, "assets", "pieces");
 const PROFILES_PATH = resolve(SKILL_ROOT, "references", "profiles.json");
 const CORE_AGENTS_ID = "core.agents";
@@ -1885,30 +1886,9 @@ function declaredFrontmatterName(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
-function directoryInventory(directory: string): Inventory {
-  const files: Record<string, Uint8Array> = {};
-  const visit = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true }).sort((a, b) => cmp(a.name, b.name))) {
-      const path = resolve(current, entry.name);
-      if (entry.isSymbolicLink()) throw fail(`Symlinks are not supported in existing skill folders: ${path}`);
-      if (entry.isDirectory()) visit(path);
-      else if (entry.isFile()) {
-        const output = relative(directory, path).replaceAll("\\", "/");
-        files[output] = readFileSync(path);
-      }
-    }
-  };
-  visit(directory);
-  const digestInput = Object.entries(files)
-    .sort(([a], [b]) => cmp(a, b))
-    .map(([path, bytes]) => `${path}\0${sha256Bytes(bytes)}`)
-    .join("\n");
-  return { files, digest: sha256Bytes(Buffer.from(digestInput, "utf8")) };
-}
-
 function installedRepositorySkillNames(root: string): Map<string, string[]> {
   const result = new Map<string, string[]>();
-  const skillsRoot = resolve(root, ".agents", "skills");
+  const skillsRoot = safeChild(root, ".agents/skills", "repository skills", fail);
   if (!existsSync(skillsRoot)) return result;
   if (!statSync(skillsRoot).isDirectory()) {
     throw fail("Repository skill root is not a directory: .agents/skills");
@@ -1942,7 +1922,7 @@ function installedRepositorySkillNames(root: string): Map<string, string[]> {
 }
 
 function readExistingLock(root: string): ScaffoldLock | undefined {
-  const lockPath = resolve(root, LOCK_NAME);
+  const lockPath = safeChild(root, LOCK_NAME, "scaffold lock", fail);
   if (!existsSync(lockPath)) return undefined;
   const lock = loadJson(lockPath) as ScaffoldLock;
   validateScaffoldLockShape(lock, fail);
@@ -1979,7 +1959,7 @@ function emissionWasManaged(
   const prefix = `${destination}/`;
   const managedPaths = Object.keys(lock.files).filter((path) => path.startsWith(prefix));
   if (!managedPaths.length) return false;
-  const current = directoryInventory(safeChild(root, destination, "managed formal-skill destination", fail));
+  const current = directoryInventory(safeChild(root, destination, "managed formal-skill destination", fail), fail);
   const currentPaths = Object.keys(current.files).sort(cmp);
   const recordedPaths = managedPaths.map((path) => path.slice(prefix.length)).sort(cmp);
   if (!sameValue(currentPaths, recordedPaths)) return false;
@@ -2056,7 +2036,7 @@ function planEmissions(
         );
       }
       if (managed) {
-        const current = directoryInventory(absoluteDestination);
+        const current = directoryInventory(absoluteDestination, fail);
         planned.push({
           found,
           spec,
@@ -2116,7 +2096,7 @@ function planEmissions(
           provenancePolicy: "migrate",
           migration,
           migrationSource,
-          migrationSourceDigest: directoryInventory(absoluteSource).digest,
+          migrationSourceDigest: directoryInventory(absoluteSource, fail).digest,
         });
         continue;
       }
@@ -2140,7 +2120,7 @@ function planEmissions(
         continue;
       }
 
-      const current = directoryInventory(absoluteDestination);
+      const current = directoryInventory(absoluteDestination, fail);
       const currentSkill = current.files["SKILL.md"];
       if (!currentSkill || frontmatterName(currentSkill, `${destination}/SKILL.md`) !== spec.name) {
         throw fail(`Existing formal-skill folder identity does not match ${spec.name}: ${destination}`);
@@ -2454,7 +2434,7 @@ function applyPlan(plan: Plan): void {
       if (existsSync(source)) rmSync(source, { recursive: true, force: false });
     }
   }
-  atomicWrite(resolve(plan.root, LOCK_NAME), plan.lockContent);
+  atomicWrite(safeChild(plan.root, LOCK_NAME, "scaffold lock", fail), plan.lockContent);
 }
 
 function parseParameterAssignment(value: string): [string, unknown] {

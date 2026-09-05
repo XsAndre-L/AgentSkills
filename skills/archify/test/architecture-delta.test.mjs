@@ -333,7 +333,9 @@ test('compare CLI writes a deterministic three-state artifact and complete sidec
   assert.deepEqual(validateArchitectureDeltaHtml(firstHtml, receipt), { ok: true, checksPassed: 10, checkCount: 10 });
 });
 
-test('checked-in Checkout compare artifact is reproducible from its authoritative inputs', () => {
+test('checked-in Checkout compare artifact is reproducible from its authoritative inputs', {
+  skip: !fs.existsSync(checkedArtifact) && 'Requires the upstream comparison golden artifact and receipt.',
+}, () => {
   const artifact = path.join(tmp, 'checked-artifact.html');
   const receipt = path.join(tmp, 'checked-artifact.receipt.json');
   const result = run([

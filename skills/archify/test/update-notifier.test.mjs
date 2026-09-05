@@ -351,7 +351,9 @@ function options(testFixture, fetchImpl, overrides = {}) {
     fetchImpl,
     now: () => baseTime,
     random: () => 0.5,
-    timeoutMs: 50,
+    // Concurrency fixtures intentionally pause network responses while doing
+    // filesystem work. Keep that orchestration outside the timeout under test.
+    timeoutMs: 2_000,
     ...overrides,
   };
 }

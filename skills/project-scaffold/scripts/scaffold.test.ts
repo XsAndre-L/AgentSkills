@@ -4,7 +4,10 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -140,6 +143,24 @@ describe("project scaffold Bun CLI", () => {
     atomicWrite(target, Buffer.from("first\n"));
     atomicWrite(target, Buffer.from("second\n"));
     expect(readFileSync(target, "utf8")).toBe("second\n");
+  });
+
+  test("rejects a junction alias before plan or apply can write colliding outputs", () => {
+    const project = temporaryRoot("junction");
+    const link = join(project, ".agents");
+    writeFileSync(join(project, "keep.txt"), "existing work\n");
+    symlinkSync(project, link, process.platform === "win32" ? "junction" : "dir");
+    try {
+      for (const command of ["plan", "apply"]) {
+        const result = run(SCAFFOLD, [command, "--root", project, "--json"]);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain("Symlinks and junctions are not supported");
+        expect(readdirSync(project).sort()).toEqual([".agents", "keep.txt"]);
+        expect(readFileSync(join(project, "keep.txt"), "utf8")).toBe("existing work\n");
+      }
+    } finally {
+      unlinkSync(link);
+    }
   });
 
   test("fails validation for a modified obsolete file", () => {

@@ -451,7 +451,7 @@ test('cli: deliver XML guard parses markup instead of scanning attribute-like te
   );
 });
 
-test('cli: preview runs from an installed skill without node_modules and exits cleanly', { timeout: 30000 }, async () => {
+test('cli: preview runs from an installed skill without node_modules and stops', { timeout: 30000 }, async () => {
   const installedRoot = path.join(tmp, 'installed-preview-skill');
   copyInstalledSkill(installedRoot);
   const installedCli = path.join(installedRoot, 'bin/archify.mjs');
@@ -489,10 +489,14 @@ test('cli: preview runs from an installed skill without node_modules and exits c
 
   child.kill('SIGTERM');
   const exit = await new Promise((resolve) => child.once('close', (code, signal) => resolve({ code, signal })));
-  assert.deepEqual(exit, { code: 0, signal: null });
-  assert.match(stdout, /stopping preview/);
+  // Windows terminates the process directly; POSIX dispatches its SIGTERM handler.
+  assert.deepEqual(exit, process.platform === 'win32'
+    ? { code: null, signal: 'SIGTERM' } : { code: 0, signal: null });
+  if (process.platform !== 'win32') assert.match(stdout, /stopping preview/);
   await assert.rejects(fetch(previewUrl));
-  assert.deepEqual(fs.readdirSync(path.dirname(output)).filter((name) => name.startsWith('.archify-preview-')), []);
+  if (process.platform !== 'win32') {
+    assert.deepEqual(fs.readdirSync(path.dirname(output)).filter((name) => name.startsWith('.archify-preview-')), []);
+  }
 });
 
 test('cli: deliver preserves the previous artifact when the final check fails', () => {
@@ -753,7 +757,10 @@ test('cli: validate rejects unknown flags, layout-json assignment typos, and ext
 });
 
 test('cli: inspect emits architecture layout json', () => {
-  const input = path.resolve(skillRoot, '../examples/archify-repo-grid.architecture.json');
+  const input = path.join(tmp, 'inspect-grid.architecture.json');
+  const diagram = JSON.parse(fs.readFileSync(path.join(skillRoot, 'examples/web-app.architecture.json'), 'utf8'));
+  diagram.layout = { mode: 'grid' };
+  fs.writeFileSync(input, JSON.stringify(diagram));
   const result = run(['inspect', 'architecture', input]);
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout);
@@ -811,7 +818,7 @@ process.on('exit', () => fs.rmSync(tmp, { recursive: true, force: true }));
 test('render rejects a mistyped option instead of writing a file named after it', () => {
   const dir = fs.mkdtempSync(path.join(tmp, 'render-guard-'));
   const spec = path.join(dir, 'spec.json');
-  fs.copyFileSync(path.join(skillRoot, '../examples/archify-repo.architecture.json'), spec);
+  fs.copyFileSync(path.join(skillRoot, 'examples/web-app.architecture.json'), spec);
 
   // Without the guard this wrote a 600KB file literally named `--json` and
   // never wrote out.html, exiting 0.
@@ -825,7 +832,7 @@ test('render rejects a mistyped option instead of writing a file named after it'
 test('render rejects an extra positional argument', () => {
   const dir = fs.mkdtempSync(path.join(tmp, 'render-arity-'));
   const spec = path.join(dir, 'spec.json');
-  fs.copyFileSync(path.join(skillRoot, '../examples/archify-repo.architecture.json'), spec);
+  fs.copyFileSync(path.join(skillRoot, 'examples/web-app.architecture.json'), spec);
 
   const result = run(['render', 'architecture', spec, 'out.html', 'extra.html'], { cwd: dir });
 

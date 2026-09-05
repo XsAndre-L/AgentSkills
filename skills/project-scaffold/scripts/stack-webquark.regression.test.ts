@@ -3,9 +3,12 @@ import {
   appendFileSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
+  unlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -229,5 +232,39 @@ describe("stack.webquark scaffold regression", () => {
     expect(readFileSync(themePath)).toEqual(themeBefore);
     expect(readFileSync(mainPath)).toEqual(mainBefore);
     expect(readFileSync(lockPath)).toEqual(lockBefore);
+  });
+
+  test("validates full emitted inventories without rejecting unrelated project files", () => {
+    const project = temporaryProject("emission-drift");
+    const args = profileArgs(project, false);
+    expect(run(SCAFFOLD, ["apply", ...args]).exitCode).toBe(0);
+    writeFileSync(join(project, "user-notes.md"), "unmanaged project notes\n");
+    expect(run(VALIDATE, ["--root", project, "--json"]).exitCode).toBe(0);
+
+    const skillRoot = join(project, ".agents", "skills", "angular-developer");
+    mkdirSync(join(skillRoot, "custom"));
+    const extra = join(skillRoot, "custom", "notes.md");
+    writeFileSync(extra, "custom skill instructions\n");
+    const added = run(VALIDATE, ["--root", project, "--json"]);
+    expect(added.exitCode).toBe(1);
+    expect(JSON.parse(added.stdout).results).toContainEqual({
+      path: ".agents/skills/angular-developer/custom/notes.md", status: "unexpected",
+    });
+    expect(run(SCAFFOLD, ["plan", ...args]).exitCode).toBe(1);
+
+    unlinkSync(extra);
+    expect(run(VALIDATE, ["--root", project, "--json"]).exitCode).toBe(0);
+    const skillPath = join(skillRoot, "SKILL.md");
+    const original = readFileSync(skillPath);
+    appendFileSync(skillPath, "\nCustom instructions\n");
+    const changed = run(VALIDATE, ["--root", project, "--json"]);
+    expect(changed.exitCode).toBe(1);
+    expect(JSON.parse(changed.stdout).counts.modified).toBe(1);
+    unlinkSync(skillPath);
+    const removed = run(VALIDATE, ["--root", project, "--json"]);
+    expect(removed.exitCode).toBe(1);
+    expect(JSON.parse(removed.stdout).counts.missing).toBe(1);
+    writeFileSync(skillPath, original);
+    expect(run(VALIDATE, ["--root", project, "--json"]).exitCode).toBe(0);
   });
 });

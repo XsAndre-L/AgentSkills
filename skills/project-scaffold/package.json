@@ -1,0 +1,12 @@
+{
+  "name": "project-scaffold",
+  "version": "0.12.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ./scripts"
+  },
+  "devDependencies": {
+    "typescript": "6.0.2"
+  }
+}

@@ -106,3 +106,39 @@ AgentSkills/
 
 Every skill must remain self-contained beneath its own folder. Add its packaged
 `.skill` file under `packages/` and list both paths above.
+
+## Development checks and packaging
+
+Install test dependencies and run the scaffolder's regression suite:
+
+```powershell
+npm ci --prefix skills/project-scaffold
+bun test ./skills/project-scaffold/scripts
+```
+
+Archify has its own standalone development checks:
+
+```powershell
+npm ci --prefix skills/archify
+npm test --prefix skills/archify
+```
+
+See [Archify development notes](skills/archify/DEVELOPMENT.md) for the boundary
+between bundled runtime tests and tests requiring the complete upstream website
+and release repository. The import has local development-command adaptations;
+its upstream rendering runtime is unchanged.
+
+Build changed packages, then verify every archive against source with PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File scripts/package-skills.ps1
+pwsh -NoProfile -File scripts/package-skills.ps1 -Check
+pwsh -NoProfile -File scripts/package-skills.test.ps1
+```
+
+Use `-Skill project-scaffold` to limit a build or check to one skill. Check mode
+does not write files and exits nonzero for missing, extra, changed, or duplicate
+archive entries. Builds preserve one top-level skill folder, omit caches and
+dependencies, and verify a temporary archive before replacing the download.
+Archify keeps its existing runtime-only packaging rule: development tests,
+generators, dependency metadata, and development scripts are excluded.

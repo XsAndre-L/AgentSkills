@@ -4,9 +4,11 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -287,7 +289,11 @@ export function safeChild(
 
   for (const [index, segment] of segments.entries()) {
     const next = join(candidate, segment);
-    if (existsSync(next)) {
+    const nextStat = lstatSync(next, { throwIfNoEntry: false });
+    if (nextStat?.isSymbolicLink()) {
+      throw makeError(`Symlinks and junctions are not supported in ${label} paths: ${value}`);
+    }
+    if (nextStat) {
       const actual = realpathSync(next);
       if (!isWithin(canonicalRoot, actual)) {
         throw makeError(`${capitalize(label)} escapes its root: ${value}`);
@@ -315,6 +321,32 @@ export function sha256Bytes(value: Uint8Array): string {
 
 export function sha256File(path: string): string {
   return sha256Bytes(readFileSync(path));
+}
+
+export function directoryInventory(
+  directory: string,
+  makeError: ErrorFactory,
+): { files: Record<string, Uint8Array>; digest: string } {
+  const files: Record<string, Uint8Array> = {};
+  const visit = (current: string): void => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const path = join(current, entry.name);
+      if (entry.isSymbolicLink()) {
+        throw makeError(`Symlinks are not supported in existing skill folders: ${path}`);
+      }
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile()) {
+        files[relative(directory, path).replaceAll("\\", "/")] = readFileSync(path);
+      } else {
+        throw makeError(`Unsupported entry in existing skill folder: ${path}`);
+      }
+    }
+  };
+  visit(directory);
+  const digestInput = sortedEntries(files)
+    .map(([path, bytes]) => `${path}\0${sha256Bytes(bytes)}`)
+    .join("\n");
+  return { files, digest: sha256Bytes(Buffer.from(digestInput, "utf8")) };
 }
 
 export function atomicWrite(path: string, content: Uint8Array): void {

@@ -80,9 +80,8 @@ describe("foundation blockers and Bun workspace integration", () => {
   });
 
   test("resolves the foundation capability and applies the workspace piece", () => {
-    const fixturePlugin = join(temporaryRoot("workspace"), "project-scaffold");
-    cpSync(resolve(SKILL_ROOT, "..", ".."), fixturePlugin, { recursive: true });
-    const fixture = join(fixturePlugin, "skills", "project-scaffold");
+    const fixture = join(temporaryRoot("workspace"), "project-scaffold");
+    cpSync(SKILL_ROOT, fixture, { recursive: true });
     const profilesPath = join(fixture, "references", "profiles.json");
     const profiles = JSON.parse(readFileSync(profilesPath, "utf8"));
     profiles.profiles["workspace-only"] = {
