@@ -82,6 +82,21 @@ instructions from the installed CLI.
 - License: [Apache-2.0](skills/agent-browser/LICENSE.txt)
 - [Download only agent-browser.skill](https://raw.githubusercontent.com/XsAndre-L/AgentSkills/main/packages/agent-browser.skill)
 
+## Official Microsoft skills
+
+### playwright-cli
+
+Microsoft's browser automation skill for interacting with web pages, capturing
+screenshots, debugging browser sessions, and working with Playwright tests.
+Requires the Playwright CLI (`@playwright/cli`) or a compatible local Playwright
+installation.
+
+- Source: [skills/playwright-cli](skills/playwright-cli/)
+- Official upstream: [microsoft/playwright-cli](https://github.com/microsoft/playwright-cli/tree/main/skills/playwright-cli)
+- Imported revision: [`655530f`](https://github.com/microsoft/playwright-cli/commit/655530f6d0dc71a0d6bf46ae165877d3c7311099) (latest `main`, verified 2026-09-09)
+- License: [Apache-2.0](skills/playwright-cli/LICENSE.txt)
+- [Download only playwright-cli.skill](https://raw.githubusercontent.com/XsAndre-L/AgentSkills/main/packages/playwright-cli.skill)
+
 ## Official Archify skill
 
 ### archify
